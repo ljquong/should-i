@@ -6,9 +6,9 @@ CREATE TABLE User (
     id SERIAL PRIMARY KEY,
     first_name VARCHAR(100) NOT NULL,
     last_name VARCHAR(100) NOT NULL,
-    username VARCHAR(100) NOT NULL,
-    password VARCHAR(100) NOT NULL,
-    email TEXT NOT NULL,
+    username TEXT NOT NULL UNIQUE,
+    password TEXT NOT NULL,
+    email TEXT NOT NULL UNIQUE,
     school TEXT NOT NULL,
     address TEXT NOT NULL,
     degree TEXT NOT NULL,
@@ -22,8 +22,3 @@ CREATE TABLE Course (
     course_number INTEGER NOT NULL,
     seriousness CHAR(1)
 );
-
-INSERT INTO User(first_name, last_name, username, password, email, school, address, degree, year) VALUES 
-("John", "Doe", "johndoe", "password", "johndoe@ucalgary.ca", "University of Calgary", "123 Street", "Engineering", 1);
-
-SELECT * FROM User;
