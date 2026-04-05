@@ -21,4 +21,4 @@ CREATE TABLE Course (
     course_code CHAR(4) NOT NULL,
     course_number INTEGER NOT NULL,
     seriousness CHAR(1)
-););
+);
