@@ -20,5 +20,10 @@ CREATE TABLE Course (
     user_id INTEGER REFERENCES User(id),
     course_code CHAR(4) NOT NULL,
     course_number INTEGER NOT NULL,
-    seriousness CHAR(4)
+    seriousness CHAR(1)
 );
+
+INSERT INTO User(first_name, last_name, username, password, email, school, address, degree, year) VALUES 
+("John", "Doe", "johndoe", "password", "johndoe@ucalgary.ca", "University of Calgary", "123 Street", "Engineering", 1);
+
+SELECT * FROM User;
