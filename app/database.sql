@@ -6,9 +6,9 @@ CREATE TABLE User (
     id SERIAL PRIMARY KEY,
     first_name VARCHAR(100) NOT NULL,
     last_name VARCHAR(100) NOT NULL,
-    username TEXT NOT NULL UNIQUE,
+    username VARCHAR(100) NOT NULL UNIQUE,
     password TEXT NOT NULL,
-    email TEXT NOT NULL UNIQUE,
+    email VARCHAR(255) NOT NULL UNIQUE,
     school TEXT NOT NULL,
     address TEXT NOT NULL,
     degree TEXT NOT NULL,
@@ -21,4 +21,4 @@ CREATE TABLE Course (
     course_code CHAR(4) NOT NULL,
     course_number INTEGER NOT NULL,
     seriousness CHAR(1)
-);
+););
