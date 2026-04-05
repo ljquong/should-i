@@ -5,11 +5,16 @@ import json
 import os
 import secrets
 import tempfile
+
+from dotenv import load_dotenv
 from datetime import UTC, datetime, timedelta
 
 from google import genai
 from dotenv import load_dotenv
 from fastapi import Depends, FastAPI, HTTPException, UploadFile, status
+
+from fastapi import Depends, FastAPI, HTTPException, status
+from fastapi.middleware.cors import CORSMiddleware
 from mysql.connector import Error, MySQLConnection
 from pydantic import BaseModel, EmailStr, Field
 
@@ -19,6 +24,19 @@ from app.database import get_db
 load_dotenv()
 
 app = FastAPI()
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=[
+        "http://localhost:5173",
+        "http://127.0.0.1:5173",
+        "http://localhost:4173",
+        "http://127.0.0.1:4173",
+    ],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 JWT_SECRET = os.getenv("JWT_SECRET", "dev-secret-change-me")
 JWT_ALGORITHM = "HS256"
@@ -230,4 +248,116 @@ async def upload(file: UploadFile):
 
 
 
+class GetMeRequest(BaseModel):
+    username: str
+
+class GetMeResponse(BaseModel):
+    id: int
+    first_name: str
+    last_name: str
+    username: str
+    email: EmailStr
+    school: str
+    address: str
+    degree: str
+    year: int
+
+@app.post("/getme", response_model=GetMeResponse)
+def get_me(payload: GetMeRequest, db: MySQLConnection = Depends(get_db)):
+    cursor = db.cursor(dictionary=True)
+    try:
+        cursor.execute(
+            "SELECT id, first_name, last_name, username, email, school, address, degree, year FROM `User` WHERE username = %s",
+            (payload.username,)
+        )
+        user = cursor.fetchone()
+    except Error as exc:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to fetch user",
+        ) from exc
+    finally:
+        cursor.close()
+
+    if not user:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="User not found"
+        )
+
+    return GetMeResponse(**user)
+
+class PredictRequest(BaseModel):
+    course_name: str = Field(min_length=1, max_length=4)
+    course_number: int = Field(ge=0)
+    mandatory_attendance: bool = Field(False)
+    exam_or_quiz: bool = Field(False)
+    weather: str = Field(min_length=1, max_length=100)
+    commute: int = Field(ge=0)
+    core: bool = Field(False)
+
+class PredictResponse(BaseModel):
+    recommendation: str
+
+def predict(attendance, exam, weather, commute, seriousness, core):
+    if exam:
+        return "GO TO CLASS"
+    if attendance:
+        return "GO TO CLASS"
+    score = 0
+    bad_weather = ("rainy", "snowy", "hail")
+    good_weather = ("sunny", "clear", "chinook")
+    if weather.lower() in bad_weather:
+        score -= 1
+    elif weather.lower() in good_weather:
+        score += 1
+    if commute > 60:
+        score -= 1
+    elif commute < 30:
+        score += 0.5
+    if seriousness == 3:
+        score += 2
+    elif seriousness == 2:
+        score += 1
+    elif seriousness == 1:
+        score -= 1
+    if core:
+        score += 1
+    else:
+        score -= 1
+    if score >= 2:
+        return "GO TO CLASS"
+    elif score >= 0:
+        return "YOUR CALL"
+    else:
+        return "SKIP"
+
+@app.post("/predict", response_model=PredictResponse)
+def predict(payload: PredictRequest, db: MySQLConnection = Depends(get_db)):
+    cursor = db.cursor(dictionary=True)
+    try:
+        cursor.execute(
+            """
+            SELECT seriousness
+            FROM Course
+            WHERE course_code = %s AND course_number = %s
+            """,
+            (payload.course_name.upper(), payload.course_number)
+        )
+        course = cursor.fetchone()
+        if not course:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Course not found"
+            )
+        seriousness = course["seriousness"]
+    except Error as exc:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to fetch course seriousness"
+        ) from exc
+    finally:
+        cursor.close()
+    recommendation = predict(payload.mandatory_attendance, payload.exam_or_quiz, payload.weather, payload.commute, seriousness, payload.core)
+    return PredictResponse(recommendation=recommendation)
 

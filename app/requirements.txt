@@ -4,3 +4,5 @@ email-validator
 uvicorn
 python-dotenv
 google-genai
+python-dotenv
+google-genai
