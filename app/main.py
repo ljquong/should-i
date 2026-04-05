@@ -189,3 +189,41 @@ def login(payload: LoginRequest, db: MySQLConnection = Depends(get_db)) -> Token
         username=user["username"],
     )
 
+class GetMeRequest(BaseModel):
+    username: str
+
+class GetMeResponse(BaseModel):
+    id: int
+    first_name: str
+    last_name: str
+    username: str
+    email: EmailStr
+    school: str
+    address: str
+    degree: str
+    year: int
+
+@app.post("/getme", response_model=GetMeResponse)
+def get_me(payload: GetMeRequest, db: MySQLConnection = Depends(get_db)):
+    cursor = db.cursor(dictionary=True)
+    try:
+        cursor.execute(
+            "SELECT id, first_name, last_name, username, email, school, address, degree, year FROM `User` WHERE username = %s",
+            (payload.username,)
+        )
+        user = cursor.fetchone()
+    except Error as exc:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to fetch user",
+        ) from exc
+    finally:
+        cursor.close()
+
+    if not user:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="User not found"
+        )
+
+    return GetMeResponse(**user)
