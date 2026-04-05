@@ -227,3 +227,77 @@ def get_me(payload: GetMeRequest, db: MySQLConnection = Depends(get_db)):
         )
 
     return GetMeResponse(**user)
+
+class PredictRequest(BaseModel):
+    course_name: str = Field(min_length=1, max_length=4)
+    course_number: int = Field(ge=0)
+    mandatory_attendance: bool = Field(False)
+    exam_or_quiz: bool = Field(False)
+    weather: str = Field(min_length=1, max_length=100)
+    commute: int = Field(ge=0)
+    core: bool = Field(False)
+
+class PredictResponse(BaseModel):
+    recommendation: str
+
+def predict(attendance, exam, weather, commute, seriousness, core):
+    if exam:
+        return "GO TO CLASS"
+    if attendance:
+        return "GO TO CLASS"
+    score = 0
+    bad_weather = ("rainy", "snowy", "hail")
+    good_weather = ("sunny", "clear", "chinook")
+    if weather.lower() in bad_weather:
+        score -= 1
+    elif weather.lower() in good_weather:
+        score += 1
+    if commute > 60:
+        score -= 1
+    elif commute < 30:
+        score += 0.5
+    if seriousness == 3:
+        score += 2
+    elif seriousness == 2:
+        score += 1
+    elif seriousness == 1:
+        score -= 1
+    if core:
+        score += 1
+    else:
+        score -= 1
+    if score >= 2:
+        return "GO TO CLASS"
+    elif score >= 0:
+        return "YOUR CALL"
+    else:
+        return "SKIP"
+
+@app.post("/predict", response_model=PredictResponse)
+def predict(payload: PredictRequest, db: MySQLConnection = Depends(get_db)):
+    cursor = db.cursor(dictionary=True)
+    try:
+        cursor.execute(
+            """
+            SELECT seriousness
+            FROM Course
+            WHERE course_code = %s AND course_number = %s
+            """,
+            (payload.course_name.upper(), payload.course_number)
+        )
+        course = cursor.fetchone()
+        if not course:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Course not found"
+            )
+        seriousness = course["seriousness"]
+    except Error as exc:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to fetch course seriousness"
+        ) from exc
+    finally:
+        cursor.close()
+    recommendation = predict(payload.mandatory_attendance, payload.exam_or_quiz, payload.weather, payload.commute, seriousness, payload.core)
+    return PredictResponse(recommendation=recommendation)
