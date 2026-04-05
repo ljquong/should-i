@@ -2,3 +2,5 @@ fastapi
 mysql-connector-python
 email-validator
 uvicorn
+python-dotenv
+google-genai

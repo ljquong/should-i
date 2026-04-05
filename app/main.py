@@ -4,20 +4,26 @@ import hmac
 import json
 import os
 import secrets
+import tempfile
 from datetime import UTC, datetime, timedelta
 
-from fastapi import Depends, FastAPI, HTTPException, status
+from google import genai
+from dotenv import load_dotenv
+from fastapi import Depends, FastAPI, HTTPException, UploadFile, status
 from mysql.connector import Error, MySQLConnection
 from pydantic import BaseModel, EmailStr, Field
 
 from app.database import get_db
 
 
+load_dotenv()
+
 app = FastAPI()
 
 JWT_SECRET = os.getenv("JWT_SECRET", "dev-secret-change-me")
 JWT_ALGORITHM = "HS256"
 JWT_EXPIRE_MINUTES = int(os.getenv("JWT_EXPIRE_MINUTES", "60"))
+GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
 
 
 class RegisterRequest(BaseModel):
@@ -42,6 +48,9 @@ class TokenResponse(BaseModel):
     token_type: str = "bearer"
     user_id: int
     username: str
+
+class CourseReq(BaseModel):
+    course_code : str = Field(min_length=3, max_length=3)
 
 
 def hash_password(password: str) -> str:
@@ -93,6 +102,9 @@ def create_access_token(subject: str) -> str:
     ).digest()
     signature_segment = _urlsafe_b64encode(signature)
     return f"{header_segment}.{payload_segment}.{signature_segment}"
+
+
+client = genai.Client(api_key=GEMINI_API_KEY)
 
 
 @app.get("/")
@@ -188,4 +200,34 @@ def login(payload: LoginRequest, db: MySQLConnection = Depends(get_db)) -> Token
         user_id=user["id"],
         username=user["username"],
     )
+
+#@app.post("/register/courses")
+#def setup_courses(payLoad: CourseReq, db: MySQLConnection = Depends(get_db())):
+
+
+
+@app.post("/upload")
+async def upload(file: UploadFile):
+    suffix = os.path.splitext(file.filename or "")[1] or ".pdf"
+    temp_path = None
+
+    try:
+        with tempfile.NamedTemporaryFile(delete=False, suffix=suffix) as temp_file:
+            temp_file.write(await file.read())
+            temp_path = temp_file.name
+
+        uploaded_file = client.files.upload(file=temp_path)
+        response = client.models.generate_content(
+            model="gemini-3.1-flash-lite-preview",
+            contents=["Summarize contents", uploaded_file],
+        )
+    finally:
+        await file.close()
+        if temp_path and os.path.exists(temp_path):
+            os.remove(temp_path)
+
+    return {"filename": file.filename, "summary": response.text}
+
+
+
 
